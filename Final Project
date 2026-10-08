@@ -1,0 +1,192 @@
+Exercise 1: Apply Image Transformations
+Python
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+])
+Exercise 2: Load Datasets with Transformations
+Python
+from torchvision.datasets import ImageFolder
+
+train_dataset = ImageFolder(root="dataset/train", transform=transform)
+val_dataset = ImageFolder(root="dataset/val", transform=transform)
+Exercise 3: Visualize Samples from the Validation Set
+Python
+i = 0
+for x, y in val_dataset:
+    imshow_(x, f"y = {y}")
+    i += 1
+    if i == 3:
+        break
+Exercise 4: Reflect on Your Dataset and Transformations
+Why normalization is important: Pretrained networks (like ResNet) were trained on ImageNet images that were standardized using specific mean and standard deviation values. Normalizing input data using these same statistics ensures feature activations align with expected distributions and accelerates gradient descent convergence.
+
+Benefits of resizing to (224, 224): Standardizes tensor dimensions so that batch operations can be performed efficiently in PyTorch, matching the input spatial size expected by pre-trained CNN architectures.
+
+Varying input sizes: Convolutional layers can process varying spatial dimensions, but fully connected linear layers require fixed-length inputs. Unequal image sizes prevent tensor batching without custom dynamic padding or spatial pyramid pooling.
+
+Exercise 5: Epochs and Batch Size
+Python
+n_epochs = 10
+batch_size = 32
+Exercise 6: Configure Learning Rate and Momentum
+Python
+learning_rate = 0.000001
+momentum = 0.9
+Exercise 7: Learning Rate Scheduler – Understanding and Setup
+Python
+lr_scheduler = True
+base_lr = 0.001
+max_lr = 0.01
+Exercise 8: Analyze Training Configuration
+Purpose of choosing specific epoch counts: Prevents underfitting (stopping before convergence) and overfitting (training too long after optimal validation performance is achieved).
+
+Importance of batch size: Larger batch sizes provide smoother gradient updates and leverage parallel hardware better, while smaller batch sizes introduce regularizing noise and reduce memory consumption.
+
+Learning rate scheduler benefit: Dynamic learning rates help escape saddle points early in training and refine step sizes as the optimizer approaches a local minimum.
+
+Exercise 9: Load a Pretrained Model
+Python
+model = models.resnet18(pretrained=True)
+Exercise 10: Freeze Feature Extractor Layers
+Python
+for param in model.parameters():
+    param.requires_grad = False
+Exercise 11: Determine the Number of Classes
+Python
+n_classes = len(train_dataset.classes)
+print(n_classes)
+Exercise 12: Replace the Output Layer
+Python
+model.fc = nn.Linear(512, n_classes)
+Exercise 13: Define the Loss Function
+Python
+criterion = nn.CrossEntropyLoss()
+Exercise 14: Create Data Loaders
+Python
+train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+validation_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=1)
+Exercise 15: Set Up the Optimizer
+Python
+optimizer = torch.optim.SGD(model.fc.parameters(), lr=learning_rate, momentum=momentum)
+Exercise 16: Configure a Learning Rate Scheduler
+Python
+if lr_scheduler:
+    scheduler = torch.optim.lr_scheduler.CyclicLR(
+        optimizer,
+        base_lr=base_lr,
+        max_lr=max_lr,
+        step_size_up=5,
+        mode="triangular2"
+    )
+Exercise 17: Implement and Analyze the Training Loop
+Python
+def train_model(model, train_loader, validation_loader, criterion, optimizer, n_epochs, print_=True):
+    loss_list = []
+    accuracy_list = []
+    correct = 0
+
+    n_test = len(val_dataset)
+    accuracy_best = 0
+    best_model_wts = copy.deepcopy(model.state_dict())
+
+    print("The first epoch should take several minutes")
+
+    for epoch in tqdm(range(n_epochs)):
+        loss_sublist = []
+
+        for x, y in train_loader:
+            x, y = x.to(device), y.to(device)
+            model.train()
+
+            z = model(x)
+            loss = criterion(z, y)
+            loss_sublist.append(loss.item())
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        print(f"Epoch {epoch + 1} done")
+
+        if lr_scheduler:
+            scheduler.step()
+
+        loss_list.append(np.mean(loss_sublist))
+
+        correct = 0
+        model.eval()
+        with torch.no_grad():
+            for x_test, y_test in validation_loader:
+                x_test, y_test = x_test.to(device), y_test.to(device)
+                z = model(x_test)
+                _, yhat = torch.max(z.data, 1)
+                correct += (yhat == y_test).sum().item()
+
+        accuracy = correct / n_test
+        accuracy_list.append(accuracy)
+
+        if accuracy > accuracy_best:
+            accuracy_best = accuracy
+            best_model_wts = copy.deepcopy(model.state_dict())
+
+        if print_:
+            print("Learning rate:", optimizer.param_groups[0]['lr'])
+            print(f"Validation loss (epoch {epoch + 1}): {np.mean(loss_sublist):.4f}")
+            print(f"Validation accuracy (epoch {epoch + 1}): {accuracy:.4f}")
+
+    model.load_state_dict(best_model_wts)
+    return accuracy_list, loss_list, model
+Exercise 18: Reflection
+If we do not track and save the best model weights based on validation accuracy during training, the final model state will simply be the result of the last epoch. If the model begins to overfit in later epochs, performance on validation/real-world vehicle data will degrade compared to an earlier checkpoint.
+
+Exercise 19: Plot Training Loss and Validation Accuracy
+Python
+plot_stuff(loss_list, accuracy_list)
+Exercise 20: Interpret the Learning Curves
+B. It decreases steadily
+
+B. It fluctuates but generally stays high
+
+Exercise 21: Load a Trained Model for Inference
+Python
+class_names = ['not_stop', 'stop']  
+
+model = models.resnet18(pretrained=False) 
+model.fc = torch.nn.Linear(model.fc.in_features, len(class_names))  
+
+model.load_state_dict(torch.load("model.pt", map_location=torch.device('cpu'))) 
+model.eval()
+Exercise 22: Preprocess an Image for Prediction
+Python
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225])
+])
+Exercise 23: Load and Convert the Image
+Python
+image_path = "stop-1.jpeg"
+image = Image.open(image_path).convert("RGB")
+
+input_tensor = transform(image).unsqueeze(0)
+Exercise 24: Unsample Dimension Question
+C. To add a batch dimension for the model
+
+Exercise 25: Make a Prediction and Display the Result
+Python
+with torch.no_grad():
+    outputs = model(input_tensor)
+    predicted_class = torch.argmax(outputs, dim=1).item()
+
+print(f"The image was classified as: {class_names[predicted_class]}")
+
+plt.imshow(image)
+plt.title(f"Predicted: {class_names[predicted_class]}")
+plt.axis("off")
+plt.show()
